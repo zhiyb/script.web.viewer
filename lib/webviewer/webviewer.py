@@ -2,7 +2,7 @@ import xbmcaddon, xbmcvfs
 from htmltoxbmc import HTMLConverter
 import re, os, sys, time, urllib2, urlparse
 import xbmc, xbmcgui #@UnresolvedImport
-import mechanize, threading  # @UnresolvedImport
+import cookielib, mechanize, threading  # @UnresolvedImport
 import YDStreamExtractor as StreamExtractor
 import YDStreamUtils as StreamUtils
 
@@ -15,7 +15,10 @@ __url__ = 'http://code.google.com/p/webviewer-xbmc/'
 __date__ = '01-21-2013'
 __version__ = '0.9.15'
 __addon__ = xbmcaddon.Addon(id='script.web.viewer')
+__profile__ = xbmc.translatePath(__addon__.getAddonInfo('profile'))
 T = __addon__.getLocalizedString
+CPATH = os.path.join(__profile__, 'cookies.txt')
+CJ = mechanize.LWPCookieJar(CPATH)
 
 THEME = 'Default'
 
@@ -41,6 +44,8 @@ ACTION_SHOW_GUI = 18
 ACTION_PLAYER_PLAY = 79
 ACTION_MOUSE_LEFT_CLICK = 100
 ACTION_CONTEXT_MENU = 117
+ACTION_SHOW_OSD = 24
+ACTION_MENU = 163
 
 
 import locale
@@ -129,6 +134,8 @@ class WebReader:
         self.hrefFilter = re.compile('href=["\'][^"\']+?["\']')
         self.frameFixBaseURL = ''
         self.framesList = []
+        CJ.load();
+        self.browser.set_cookiejar(CJ)
 
     def setBrowser(self,browser):
         LOG('Using Alternate Browser')
@@ -1295,6 +1302,7 @@ class ViewerWindow(BaseWindow):
             #xbmcgui.unlock()
         self.displayPage()
         #self.endProgress()
+        CJ.save();
 
     LINE_COUNT = 28
     CHAR_PER_LINE = 80
@@ -1985,6 +1993,10 @@ class ViewerWindow(BaseWindow):
                 return
             self.refresh()
             return
+        elif action.getId() == ACTION_SHOW_OSD or action.getId() == ACTION_MENU:
+            self.viewReadMode()
+            __addon__.setSetting('home_page', self.page.url or self.url)
+            return
 
         BaseWindow.onAction(self, action)
 
@@ -2106,7 +2118,7 @@ class ViewerWindow(BaseWindow):
         del w
 
     def viewReadMode(self):
-        w = SourceDialog("script-webviewer-source.xml" , __addon__.getAddonInfo('path'), THEME, source=self.page.forDisplay())
+        w = SourceDialog("script-webviewer-read.xml" , __addon__.getAddonInfo('path'), THEME, source=self.page.forDisplay())
         w.doModal()
         del w
 
@@ -2345,7 +2357,9 @@ def getWebResult(url, autoForms=[], autoClose=None, dialog=False, runFromSubDir=
 
     """
     if browser: WR.setBrowser(browser)
-    if clearCookies: WR.browser._ua_handlers["_cookies"].cookiejar.clear()
+    if clearCookies:
+        WR.browser.set_cookiejar(cookielib.CookieJar())
+        WR.browser._ua_handlers["_cookies"].cookiejar.clear()
     if runFromSubDir: __addon__.setAddonPath(runFromSubDir)
     apath = xbmc.translatePath(__addon__.getAddonInfo('path'))
     if not os.path.exists(os.path.join(apath,'resources','skins','Default','720p','script-webviewer-page.xml')):
